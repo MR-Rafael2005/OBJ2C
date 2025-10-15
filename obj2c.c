@@ -32,17 +32,18 @@ typedef struct {
 } VertexUV;
 
 // Compare functions
-static bool cmp_vec3(const Vec3* a, const Vec3* b) {
+static int cmp_vec3(const Vec3* a, const Vec3* b) {
 	return (a->x == b->x) && (a->y == b->y) && (a->z == b->z);
 }
-static bool cmp_vec2(const Vec2* a, const Vec2* b) {
+static int cmp_vec2(const Vec2* a, const Vec2* b) {
 	return (a->u == b->u) && (a->v == b->v);
 }
 
 // Function to find or add a vertex with UV
 int find_or_add_vertex(VertexUV* expanded, int* expanded_count, Vec3 pos, Vec2 uv)
 {
-	for (int i = 0; i < *expanded_count; i++) {
+	int i;
+	for (i = 0; i < *expanded_count; i++) {
 		if (cmp_vec3(&expanded[i].pos, &pos) && cmp_vec2(&expanded[i].uv, &uv))
 		{
 			return i;
@@ -57,6 +58,8 @@ int find_or_add_vertex(VertexUV* expanded, int* expanded_count, Vec3 pos, Vec2 u
 
 int export_c(const char* outname)
 {
+	int i,j,k; //Generic counters
+	
 	//Create output file
 	FILE* outFile = fopen(outname, "w");
 	if (outFile == NULL)
@@ -71,22 +74,22 @@ int export_c(const char* outname)
 	int expanded_indices[MAX_FACES][3]; // Store indices for each face
 
 	// For each face, for each vertex, find or add the vertex+uv combination
-	for (int f = 0; f < face_count; f++) {
-		for (int v = 0; v < 3; v++) {
-			int vi = faces[f].v[v];
-			int ti = faces[f].vt[v];
+	for (i = 0; i < face_count; i++) {
+		for (j = 0; j < 3; j++) {
+			int vi = faces[i].v[j];
+			int ti = faces[i].vt[j];
 			Vec3 pos = vertices[vi];
 			Vec2 uv = texcoords[ti];
 			uv.v = 1.0f - uv.v; // Flip V coordinate for some systems (PS2SDK for example)
 			int idx = find_or_add_vertex(expanded, &expanded_count, pos, uv);
-			expanded_indices[f][v] = idx;
+			expanded_indices[i][j] = idx;
 		}
 	}
 
 	// Write vertices
 	fprintf(outFile, "int vertex_count = %d;\n", expanded_count);
 	fprintf(outFile, "VECTOR vertices[%d] = {\n", expanded_count);
-	for (int i = 0; i < expanded_count; i++)
+	for (i = 0; i < expanded_count; i++)
 	{
 		fprintf(outFile, "  { %.2ff, %.2ff, %.2ff, 1.00f }%s\n",
 			expanded[i].pos.x, expanded[i].pos.y, expanded[i].pos.z,
@@ -97,17 +100,17 @@ int export_c(const char* outname)
 	// Write faces (points)
 	fprintf(outFile, "int points_count = %d;\n", face_count * 3);
 	fprintf(outFile, "int points[%d] = {\n", face_count * 3);
-	for (int j = 0; j < face_count; j++)
+	for (i = 0; i < face_count; i++)
 	{
 		fprintf(outFile, "  %d, %d, %d%s\n",
-			expanded_indices[j][0], expanded_indices[j][1], expanded_indices[j][2],
-			j + 1 == face_count ? "" : ",");
+			expanded_indices[i][0], expanded_indices[i][1], expanded_indices[i][2],
+			i + 1 == face_count ? "" : ",");
 	}
 	fprintf(outFile, "};\n\n");
 
 	// Write UV coordinates
 	fprintf(outFile, "VECTOR coordinates[%d] = {\n", expanded_count);
-	for (int i = 0; i < expanded_count; i++)
+	for (i = 0; i < expanded_count; i++)
 	{
 		fprintf(outFile, "  { %.6ff, %.6ff, 0.00f, 0.00f }%s\n",
 			expanded[i].uv.u, expanded[i].uv.v,
@@ -117,7 +120,7 @@ int export_c(const char* outname)
 
 	// Write colors (all white)
 	fprintf(outFile, "VECTOR colours[%d] = {\n", expanded_count);
-	for (int i = 0; i < expanded_count; i++)
+	for (i = 0; i < expanded_count; i++)
 	{
 		fprintf(outFile, "  { 1.00f, 1.00f, 1.00f, 1.00f }%s\n", (i + 1 == expanded_count) ? "" : ",");
 	}
@@ -164,21 +167,24 @@ int main(int argc, char** argv)
 		if (strncmp(line, "v ", 2) == 0) //Search for vertex 
 		{
 			Vec3 v;
-			sscanf_s(line, "v %f %f %f", &v.x, &v.y, &v.z);
+			//sscanf_s(line, "v %f %f %f", &v.x, &v.y, &v.z); // Original (Microsoft)
+			sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 			vertices[vert_count++] = v;
 		}
 		else if (strncmp(line, "vt ", 3) == 0) //Search for texture coordinate
 		{
 			Vec2 vt;
-			sscanf_s(line + 3, "%f %f", &vt.u, &vt.v);
+			//sscanf_s(line + 3, "%f %f", &vt.u, &vt.v); // Original (Microsoft)
+			sscanf(line + 3, "%f %f", &vt.u, &vt.v);
 			texcoords[tex_count++] = vt;
 		}
 		else if (strncmp(line, "f ", 2) == 0) //Search for face
 		{
 			Face face;
-			sscanf_s(line + 2, "%d/%d %d/%d %d/%d", &face.v[0], &face.vt[0], &face.v[1], &face.vt[1], &face.v[2], &face.vt[2]);
-
-			for (int j = 0; j < 3; j++) { face.v[j]--; face.vt[j]--; }
+			//sscanf_s(line + 2, "%d/%d %d/%d %d/%d", &face.v[0], &face.vt[0], &face.v[1], &face.vt[1], &face.v[2], &face.vt[2]); // Original (Microsoft)
+			sscanf(line + 2, "%d/%d %d/%d %d/%d", &face.v[0], &face.vt[0], &face.v[1], &face.vt[1], &face.v[2], &face.vt[2]);
+			int i;
+			for (i = 0; i < 3; i++) { face.v[i]--; face.vt[i]--; }
 			faces[face_count++] = face;
 		}
 	}
